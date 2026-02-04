@@ -7,7 +7,7 @@ shoe-3d-base/
 ├─ README.md
 ├─ public/
 │   └─ models/
-│       └─ shoe.glb
+│       └─ rtfkt_creator_one.glb
 └─ src/
     ├─ main.jsx
     ├─ App.jsx
