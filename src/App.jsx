@@ -1,45 +1,55 @@
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Html } from "@react-three/drei";
-import { useRef, useState } from "react";
+import { useRef, useState, useMemo, useEffect } from "react";
 import * as THREE from "three";
+
+/* ---------------- PRODUCT DATA ---------------- */
 
 const PRODUCT_VARIANTS = [
   {
     name: "Obsidian Black",
     line: "Future Runner",
     material: "Matte Composite",
-    color: "#1a1a1a"
+    color: "#1a1a1a",
+    luminance: 0.1
   },
   {
     name: "Stone Grey",
     line: "Future Runner",
     material: "Engineered Mesh",
-    color: "#b5b5b0"
+    color: "#b5b5b0",
+    luminance: 0.55
   },
   {
     name: "Ivory White",
     line: "Future Runner",
     material: "Performance Knit",
-    color: "#f2f2ee"
+    color: "#f2f2ee",
+    luminance: 0.85
   }
 ];
 
-function Environment({ active }) {
+/* ---------------- ENVIRONMENT ---------------- */
+
+function Environment({ activeVariant }) {
   const fogRef = useRef();
   const sphereRef = useRef();
-  const warmFactor = useRef(0);
 
-  useFrame((_, delta) => {
-    warmFactor.current = THREE.MathUtils.lerp(
-      warmFactor.current,
-      active ? 1 : 0,
-      0.02
-    );
+  const targetFog = useMemo(
+    () => THREE.MathUtils.lerp(0.028, 0.04, 1 - activeVariant.luminance),
+    [activeVariant]
+  );
 
+  const targetEmissive = useMemo(
+    () => THREE.MathUtils.lerp(0.2, 0.3, 1 - activeVariant.luminance),
+    [activeVariant]
+  );
+
+  useFrame(() => {
     if (fogRef.current) {
       fogRef.current.density = THREE.MathUtils.lerp(
         fogRef.current.density,
-        active ? 0.045 : 0.03,
+        targetFog,
         0.02
       );
     }
@@ -47,7 +57,7 @@ function Environment({ active }) {
     if (sphereRef.current) {
       sphereRef.current.material.emissiveIntensity = THREE.MathUtils.lerp(
         sphereRef.current.material.emissiveIntensity,
-        active ? 0.35 : 0.2,
+        targetEmissive,
         0.02
       );
     }
@@ -62,7 +72,7 @@ function Environment({ active }) {
           side={THREE.BackSide}
           color="#0f0f12"
           emissive="#1a1a1f"
-          emissiveIntensity={0.2}
+          emissiveIntensity={0.22}
           roughness={1}
           metalness={0}
         />
@@ -71,18 +81,13 @@ function Environment({ active }) {
   );
 }
 
+/* ---------------- CAMERA PRESENCE ---------------- */
+
 function CameraPresence() {
-  const base = useRef(new THREE.Vector3());
   const t = useRef(0);
 
   useFrame(({ camera }, delta) => {
     t.current += delta * 0.15;
-    base.current.set(
-      camera.position.x,
-      camera.position.y,
-      camera.position.z
-    );
-
     camera.position.x += Math.sin(t.current) * 0.002;
     camera.position.y += Math.sin(t.current * 0.7) * 0.002;
   });
@@ -90,18 +95,23 @@ function CameraPresence() {
   return null;
 }
 
-function PlaceholderShoe({ onFirstInteraction }) {
+/* ---------------- SHOE ---------------- */
+
+function PlaceholderShoe({ variantIndex, onInteract }) {
   const meshRef = useRef();
   const materialRef = useRef();
+  const rimLightRef = useRef();
 
-  const [variantIndex, setVariantIndex] = useState(0);
   const [hasInteracted, setHasInteracted] = useState(false);
-  const [isHovering, setIsHovering] = useState(false);
-
-  const targetColor = useRef(new THREE.Color(PRODUCT_VARIANTS[0].color));
+  const variant = PRODUCT_VARIANTS[variantIndex];
+  const targetColor = useRef(new THREE.Color(variant.color));
   const idle = useRef(0);
 
-  useFrame((_, delta) => {
+  useEffect(() => {
+    targetColor.current.set(variant.color);
+  }, [variantIndex]);
+
+  useFrame((state, delta) => {
     if (!meshRef.current || !materialRef.current) return;
 
     idle.current += delta;
@@ -110,42 +120,35 @@ function PlaceholderShoe({ onFirstInteraction }) {
     meshRef.current.rotation.x =
       Math.sin(idle.current * 0.4) * 0.035;
 
-    const tilt = isHovering ? 0.12 : 0;
-    meshRef.current.rotation.z = THREE.MathUtils.lerp(
-      meshRef.current.rotation.z,
-      tilt,
-      0.06
-    );
-
     materialRef.current.color.lerp(targetColor.current, 0.05);
+
+    if (rimLightRef.current) {
+      rimLightRef.current.position.copy(state.camera.position);
+      rimLightRef.current.intensity = THREE.MathUtils.lerp(
+        rimLightRef.current.intensity,
+        THREE.MathUtils.lerp(0.4, 0.22, variant.luminance),
+        0.05
+      );
+    }
   });
 
-  const interact = () => {
-    if (!hasInteracted) {
-      setHasInteracted(true);
-      onFirstInteraction();
-    }
-
+  const handleClick = () => {
+    if (!hasInteracted) setHasInteracted(true);
     const next = (variantIndex + 1) % PRODUCT_VARIANTS.length;
-    setVariantIndex(next);
-    targetColor.current.set(PRODUCT_VARIANTS[next].color);
+    onInteract(next);
   };
-
-  const active = PRODUCT_VARIANTS[variantIndex];
 
   return (
     <>
-      <mesh
-        ref={meshRef}
-        onClick={interact}
-        onPointerEnter={() => setIsHovering(true)}
-        onPointerLeave={() => setIsHovering(false)}
-      >
+      <directionalLight ref={rimLightRef} intensity={0.25} />
+
+      <mesh ref={meshRef} onClick={handleClick}>
         <boxGeometry args={[2, 0.7, 0.8]} />
         <meshStandardMaterial
           ref={materialRef}
-          roughness={0.35}
-          metalness={0.15}
+          roughness={0.45}
+          metalness={0.12}
+          envMapIntensity={0.45}
         />
       </mesh>
 
@@ -162,9 +165,9 @@ function PlaceholderShoe({ onFirstInteraction }) {
           }}
         >
           <div>
-            <div style={{ opacity: 0.9 }}>{active.name}</div>
+            <div>{variant.name}</div>
             <div style={{ opacity: 0.5, fontSize: "12px" }}>
-              {active.line} · {active.material}
+              {variant.line} · {variant.material}
             </div>
           </div>
         </Html>
@@ -173,8 +176,10 @@ function PlaceholderShoe({ onFirstInteraction }) {
   );
 }
 
+/* ---------------- APP ---------------- */
+
 export default function App() {
-  const [revealed, setRevealed] = useState(false);
+  const [variantIndex, setVariantIndex] = useState(0);
 
   return (
     <div className="w-full h-full bg-black">
@@ -187,14 +192,17 @@ export default function App() {
         }}
         dpr={[1, 1.5]}
       >
-        <ambientLight intensity={0.3} />
+        <ambientLight intensity={0.28} />
         <directionalLight position={[5, 5, 5]} intensity={1} />
         <directionalLight position={[-5, 2, -5]} intensity={0.6} />
 
-        <Environment active={revealed} />
+        <Environment activeVariant={PRODUCT_VARIANTS[variantIndex]} />
         <CameraPresence />
 
-        <PlaceholderShoe onFirstInteraction={() => setRevealed(true)} />
+        <PlaceholderShoe
+          variantIndex={variantIndex}
+          onInteract={setVariantIndex}
+        />
 
         <OrbitControls
           enablePan={false}
