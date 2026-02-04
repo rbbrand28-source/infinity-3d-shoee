@@ -5,7 +5,10 @@ shoe-3d-base/
 ├─ tailwind.config.cjs
 ├─ vite.config.js
 ├─ README.md
+├─ public/
+│   └─ models/
+│       └─ shoe.glb
 └─ src/
-   ├─ main.jsx
-   ├─ App.jsx
-   └─ index.css
+    ├─ main.jsx
+    ├─ App.jsx
+    └─ index.css
